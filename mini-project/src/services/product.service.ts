@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import fs from "node:fs";
+import path from "node:path";
 
 export interface Product {
   id: number;
@@ -8,87 +9,71 @@ export interface Product {
   stock: number;
 }
 
-const products: Product[] = [];
+function loadProducts(): Product[] {
+  const filePath = path.resolve("data/products.csv");
+  if (!fs.existsSync(filePath)) {
+    return [];
+  }
 
-const csv = readFileSync("data/products.csv", "utf-8");
+  const fileContent = fs.readFileSync(filePath, "utf-8");
+  const lines = fileContent.split("\n").filter((line) => line.trim().length > 0);
 
-const lines = csv.trim().split("\n");
+  // Skip header line (id,name,category,price,stock)
+  const dataLines = lines.slice(1);
 
-for (let i = 1; i < lines.length; i++) {
-  const [id, name, category, price, stock] = lines[i].split(",");
-
-  products.push({
-    id: Number(id),
-    name,
-    category,
-    price: Number(price),
-    stock: Number(stock),
+  return dataLines.map((line, index) => {
+    const [, name, category, price, stock] = line.split(",");
+    return {
+      id: index + 1,
+      name: name?.trim() ?? "",
+      category: category?.trim() ?? "",
+      price: Number(price) || 0,
+      stock: Number(stock) || 0,
+    };
   });
 }
 
-let nextId =
-  products.length > 0
-    ? Math.max(...products.map((product) => product.id)) + 1
-    : 1;
+let products: Product[] = loadProducts();
+let nextId = products.length + 1;
 
-export function getProducts(): Product[] {
+export function findAllProducts(category?: string): Product[] {
+  if (category) {
+    return products.filter(
+      (p) => p.category.toLowerCase() === category.toLowerCase()
+    );
+  }
   return products;
 }
 
-export function getProductById(id: number): Product | undefined {
-  return products.find((product) => product.id === id);
+export function findProductById(id: number): Product | undefined {
+  return products.find((p) => p.id === id);
 }
 
-export function createProduct(
-  name: string,
-  category: string,
-  price: number,
-  stock: number
-): Product {
-  const product: Product = {
+export function createProduct(data: Omit<Product, "id">): Product {
+  const newProduct: Product = {
     id: nextId++,
-    name,
-    category,
-    price,
-    stock,
+    name: data.name,
+    category: data.category ?? "general",
+    price: data.price,
+    stock: data.stock ?? 0,
   };
-
-  products.push(product);
-
-  return product;
+  products.push(newProduct);
+  return newProduct;
 }
 
 export function updateProduct(
   id: number,
-  name: string,
-  category: string,
-  price: number,
-  stock: number
-): Product | undefined {
-  const product = getProductById(id);
+  data: Partial<Omit<Product, "id">>
+): Product | null {
+  const product = products.find((p) => p.id === id);
+  if (!product) return null;
 
-  if (!product) {
-    return undefined;
-  }
-
-  product.name = name;
-  product.category = category;
-  product.price = price;
-  product.stock = stock;
-
+  Object.assign(product, data);
   return product;
 }
 
-export function deleteProduct(id: number): Product | undefined {
-  const index = products.findIndex((product) => product.id === id);
-
-  if (index === -1) {
-    return undefined;
-  }
-
-  const deletedProduct = products[index];
-
-  products.splice(index, 1);
-
-  return deletedProduct;
+export function deleteProduct(id: number): boolean {
+  const initialLength = products.length;
+  products = products.filter((p) => p.id !== id);
+  return products.length < initialLength;
 }
